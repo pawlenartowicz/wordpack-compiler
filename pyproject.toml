@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wordpack-compiler"
+version = "0.1.0"
+description = "Build wordpacks: one file per (embedding, language) holding everything SSD needs to turn text into word vectors."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [
+  {name = "Paweł Lenartowicz", email = "pawellenartowicz@europe.com"},
+]
+dependencies = ["numpy>=1.26.4"]
+
+[project.optional-dependencies]
+test = ["pytest", "safetensors"]
+bench = ["ssdiff[spacy]>=3.2.0", "pandas", "pyarrow"]
+publish = ["boto3>=1.36"]
+
+[project.scripts]
+wordpack-compiler = "wordpack_compiler.cli:main"
+
+[tool.setuptools]
+packages = ["wordpack_compiler"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

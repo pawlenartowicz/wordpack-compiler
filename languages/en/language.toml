@@ -1,0 +1,10 @@
+code = "en"
+name = "English"
+keys = "surface"            # vocabulary holds words as written, not lemmas
+case_sensitive = false      # tokens are lowercased before lookup
+# Split off the end of a word before lookup: GloVe 2024 was tokenized with
+# CoreNLP, which stores `don't` as `do` + `n't`.
+clitics = ["n't", "'s", "'re", "'ve", "'ll", "'d", "'m"]
+# Keys matching this are hidden from neighbour readouts; corpus tokens are not filtered by it.
+neighbor_filter = '.*\d|^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞĄĆĘŁŃÓŚŹŻĈĜĤĴŜŬŠŽĐ]'
+stopwords_source = "spaCy 3.8.13 English stop words, MIT licence"

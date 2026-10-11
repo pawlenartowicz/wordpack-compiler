@@ -1,0 +1,31 @@
+{
+  "index_version": 1,
+  "packs": {
+    "en-glove2024-dolma": {
+      "language": "en",
+      "description": "Informal or recent text: comments, social media, open survey answers, forums.",
+      "license": "PDDL-1.0",
+      "versions": {
+        "1": {
+          "file": "en-glove2024-dolma-1.wordpack",
+          "size": 380035428,
+          "sha256": "3e0af6cfba10e74d078b12f6a544ea841e8b81f34bff666baa26de7025a2a00f",
+          "format_version": 1
+        }
+      }
+    },
+    "en-glove2024-wikigiga": {
+      "language": "en",
+      "description": "Formal text: news, essays, reports, older press.",
+      "license": "PDDL-1.0",
+      "versions": {
+        "1": {
+          "file": "en-glove2024-wikigiga-1.wordpack",
+          "size": 408952008,
+          "sha256": "cc6a60839dd04aad5375607c18ccfe8e9fbc743ac8e7592b3df7cf8ac3484de4",
+          "format_version": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+name = "en-glove2024-dolma"
+description = "Informal or recent text: comments, social media, open survey answers, forums."
+url = "https://downloads.cs.stanford.edu/nlp/data/wordvecs/glove.2024.dolma.300d.zip"
+dims = 300
+license = "PDDL-1.0"
+citation = "Carlson, Bauer & Manning (2025). A New Pair of GloVes. arXiv:2507.18103"
