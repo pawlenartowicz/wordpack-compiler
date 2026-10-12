@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     p_info = sub.add_parser("info", help="print a pack's contents and run its self-test")
     p_info.add_argument("file")
     p_publish = sub.add_parser(
-        "publish", help="upload a pack, then index.json and tags.json; with no file, only the two JSON files"
+        "publish", help="upload a pack, then index.json; with no file, only index.json"
     )
     p_publish.add_argument("file", nargs="?")
     args = parser.parse_args(argv)

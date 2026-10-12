@@ -1,4 +1,4 @@
-"""`index.json`, `tags.json` and publishing packs to the bucket."""
+"""`index.json` and publishing packs to the bucket."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class PublishError(Exception):
 
 
 def is_name(text: str) -> bool:
-    """Whether `text` can be a pack name or a short tag.
+    """Whether `text` can be a pack name.
 
     Lowercase letters, digits and hyphens, not ending in a hyphen followed
     only by digits: that ending marks a full name, `<name>-<version>`.
@@ -64,18 +64,6 @@ def make_client(config: dict):
         # may not accept.
         config=Config(request_checksum_calculation="when_required", response_checksum_validation="when_required"),
     )
-
-
-def check_tags(tags: dict, index: dict) -> list[str]:
-    """What is wrong with `tags`: a tag that breaks the naming rule, or one whose full name `index` does not list."""
-    listed = {f"{name}-{version}" for name, pack in index["packs"].items() for version in pack["versions"]}
-    problems = [f"tag {tag!r} breaks the naming rule" for tag in tags if not is_name(tag)]
-    problems += [
-        f"tag {tag!r} stands for {full!r}, which index.json does not list"
-        for tag, full in tags.items()
-        if full not in listed
-    ]
-    return problems
 
 
 def _read_json(path: Path) -> dict:
@@ -136,22 +124,16 @@ def _publish_pack(path: Path, client, bucket: str, index: dict) -> None:
 
 
 def publish(pack_path: Path | None, client, bucket: str, repo: Path) -> None:
-    """Upload `pack_path`, then `index.json` and `tags.json` from `repo`; with no pack, only the two JSON files.
+    """Upload `pack_path`, then `index.json` from `repo`; with no pack, only `index.json`.
 
-    The pack goes first and the tags last, so the published index never lists
-    a file that is not there, and no published tag stands for a pack the
-    index does not list.
+    The pack goes first, so the published index never lists a file that is not there.
     """
     index_path = repo / "index.json"
     index = _read_json(index_path)
     if pack_path is not None:
         _publish_pack(Path(pack_path), client, bucket, index)
         index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", "utf-8")
-    problems = check_tags(_read_json(repo / "tags.json"), index)
-    if problems:
-        raise PublishError("tags.json: " + "; ".join(problems))
-    for name in ("index.json", "tags.json"):
-        client.put_object(
-            Bucket=bucket, Key=PREFIX + name, Body=(repo / name).read_bytes(), ContentType="application/json"
-        )
-        print(f"uploaded {name}", file=sys.stderr)
+    client.put_object(
+        Bucket=bucket, Key=PREFIX + "index.json", Body=index_path.read_bytes(), ContentType="application/json"
+    )
+    print("uploaded index.json", file=sys.stderr)

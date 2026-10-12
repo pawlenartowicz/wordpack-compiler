@@ -14,9 +14,9 @@ and text fragments similar to a query.
 
 ## Available packs
 
-| short tag | full name | language | use it for | trained on |
+| tag | full name | language | use it for | trained on |
 |---|---|---|---|---|
-| `en` | `en-glove2024-dolma-1` | English | informal or recent text: comments, social media, open survey answers, forums | Dolma v1.6: web pages, Reddit to 2023, books |
+| `en`, `en-dolma`, `default` | `en-glove2024-dolma-1` | English | informal or recent text: comments, social media, open survey answers, forums | Dolma v1.6: web pages, Reddit to 2023, books |
 | `en-wiki` | `en-glove2024-wikigiga-1` | English | formal text: news, essays, reports, older press | Wikipedia 2024 and newswire 1994–2010 |
 
 Both are GloVe 2024, 300 dimensions, lowercase, licence PDDL-1.0. Dolma has
@@ -24,17 +24,18 @@ Both are GloVe 2024, 300 dimensions, lowercase, licence PDDL-1.0. Dolma has
 <https://downloads.cs.stanford.edu/nlp/data/wordvecs/>. Citation: Carlson,
 Bauer & Manning (2025). A New Pair of GloVes. arXiv:2507.18103.
 
-Load a pack by short tag or by full name:
+Load a pack by tag or by full name:
 
 ```python
 from ssdiff import Embeddings
 
-emb = Embeddings.load("en")                    # short tag: the current default for English
+emb = Embeddings.load("en")                    # tag: the English default of the installed ssdiff
 emb = Embeddings.load("en-glove2024-dolma-1")  # full name: always this file
 ```
 
-A full name always means the same file. A short tag can be moved to a newer
-pack, so use the full name where results must be reproducible.
+A full name always means the same file. A tag can be moved to a newer pack
+by a later ssdiff version, so use the full name where results must be
+reproducible.
 
 ## Build a pack
 
@@ -71,14 +72,14 @@ wordpack-compiler publish build/en-glove2024-dolma-1.wordpack
 ```
 
 `publish` runs the pack's self-test, uploads the pack, adds its version to
-`index.json`, checks `tags.json`, and uploads both JSON files. A published
+`index.json`, and uploads `index.json`. A published
 file is never replaced: changed contents need a new build, which gets the
 next version. Commit `index.json` after publishing; its history is the
 record of what was published.
 
-Publishing a pack does not move any short tag. To add or move one, edit
-`tags.json` and run `wordpack-compiler publish` with no file. Every tag must
-stand for a full name that `index.json` lists.
+Publishing a pack does not move any tag. The tags are listed in ssdiff, in
+`ssdiff/lang_config.py`: to add or move one, edit `WORDPACK_TAGS` there and
+release ssdiff.
 
 ## Add a language
 

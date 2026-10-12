@@ -13,7 +13,7 @@ from wordpack_compiler.publish import PublishError, publish
 from wordpack_compiler.reader import WordPackError, read_header
 
 PACK_KEY = "wordpacks/en-fixture-1.wordpack"
-JSON_KEYS = ["wordpacks/index.json", "wordpacks/tags.json"]
+INDEX_KEY = "wordpacks/index.json"
 OTHER = {
     "language": "pl",
     "description": "Another pack.",
@@ -46,9 +46,8 @@ class FakeS3:
         self.puts.append(Key)
 
 
-def write_repo(directory, packs=None, tags=None):
+def write_repo(directory, packs=None):
     (directory / "index.json").write_text(json.dumps({"index_version": 1, "packs": packs or {}}), "utf-8")
-    (directory / "tags.json").write_text(json.dumps(tags or {}), "utf-8")
     return directory
 
 
@@ -71,18 +70,17 @@ def fixture_pack(pack_path) -> dict:
     }
 
 
-def test_publish_uploads_the_pack_then_the_index_then_the_tags(pack_path, tmp_path):
+def test_publish_uploads_the_pack_then_the_index(pack_path, tmp_path):
     repo = write_repo(tmp_path, packs={"pl-other": OTHER})
     s3 = FakeS3()
     publish(pack_path, s3, "bucket", repo)
-    assert s3.puts == [PACK_KEY, *JSON_KEYS]
+    assert s3.puts == [PACK_KEY, INDEX_KEY]
     assert s3.objects[PACK_KEY] == (pack_path.read_bytes(), {"sha256": version_entry(pack_path)["sha256"]})
     assert json.loads((repo / "index.json").read_text("utf-8")) == {
         "index_version": 1,
         "packs": {"pl-other": OTHER, "en-fixture": fixture_pack(pack_path)},
     }
-    assert s3.objects["wordpacks/index.json"][0] == (repo / "index.json").read_bytes()
-    assert s3.objects["wordpacks/tags.json"][0] == (repo / "tags.json").read_bytes()
+    assert s3.objects[INDEX_KEY][0] == (repo / "index.json").read_bytes()
 
 
 def test_publish_skips_the_upload_when_the_same_pack_is_in_the_bucket(pack_path, tmp_path):
@@ -90,7 +88,7 @@ def test_publish_skips_the_upload_when_the_same_pack_is_in_the_bucket(pack_path,
     s3 = FakeS3()
     s3.objects[PACK_KEY] = (pack_path.read_bytes(), {"sha256": version_entry(pack_path)["sha256"]})
     publish(pack_path, s3, "bucket", repo)
-    assert s3.puts == JSON_KEYS
+    assert s3.puts == [INDEX_KEY]
     assert json.loads((repo / "index.json").read_text("utf-8"))["packs"] == {"en-fixture": fixture_pack(pack_path)}
 
 
@@ -128,37 +126,12 @@ def test_publish_never_replaces_a_published_file(pack_path, tmp_path, stored):
     assert (repo / "index.json").read_bytes() == before
 
 
-@pytest.mark.parametrize(
-    "tags, named",
-    [
-        ({"en": "en-fixture-2"}, "en-fixture-2"),  # a full name the index does not list
-        ({"en-1": "en-fixture-1"}, "en-1"),  # a tag that reads as a full name
-        ({"EN": "en-fixture-1"}, "EN"),  # a tag with an uppercase letter
-    ],
-)
-def test_publish_stops_before_any_json_upload_on_a_bad_tag(pack_path, tmp_path, tags, named):
-    s3 = FakeS3()
-    with pytest.raises(PublishError, match=named):
-        publish(pack_path, s3, "bucket", write_repo(tmp_path, tags=tags))
-    assert s3.puts == [PACK_KEY]
-
-
-def test_publish_can_be_run_again_after_the_tags_are_fixed(pack_path, tmp_path):
-    repo = write_repo(tmp_path, tags={"en": "en-fixture-2"})
-    s3 = FakeS3()
-    with pytest.raises(PublishError):
-        publish(pack_path, s3, "bucket", repo)
-    (repo / "tags.json").write_text(json.dumps({"en": "en-fixture-1"}), "utf-8")
-    publish(pack_path, s3, "bucket", repo)
-    assert s3.puts == [PACK_KEY, *JSON_KEYS]
-
-
-def test_publish_with_no_file_uploads_only_the_two_json_files(pack_path, tmp_path):
-    repo = write_repo(tmp_path, packs={"en-fixture": fixture_pack(pack_path)}, tags={"en": "en-fixture-1"})
+def test_publish_with_no_file_uploads_only_the_index(pack_path, tmp_path):
+    repo = write_repo(tmp_path, packs={"en-fixture": fixture_pack(pack_path)})
     before = (repo / "index.json").read_bytes()
     s3 = FakeS3()
     publish(None, s3, "bucket", repo)
-    assert s3.puts == JSON_KEYS
+    assert s3.puts == [INDEX_KEY]
     assert (repo / "index.json").read_bytes() == before
 
 
@@ -208,7 +181,7 @@ def publish_from(tmp_path, monkeypatch, s3) -> None:
     "file, s3_class",
     [
         ("missing.wordpack", FakeS3),
-        ("tags.json", FakeS3),
+        ("index.json", FakeS3),
         ("other.safetensors", FakeS3),
         (None, ForbiddenS3),
         (None, UnreachableS3),
@@ -228,13 +201,12 @@ def test_publish_prints_an_ordinary_mistake_and_uploads_nothing(
     assert s3.puts == []
 
 
-@pytest.mark.parametrize("name", ["index.json", "tags.json"])
-def test_publish_names_a_repo_file_that_is_not_valid_json(tmp_path, monkeypatch, capsys, name):
+def test_publish_names_an_index_that_is_not_valid_json(tmp_path, monkeypatch, capsys):
     s3 = FakeS3()
     publish_from(tmp_path, monkeypatch, s3)
-    (tmp_path / name).write_text("{", "utf-8")
+    (tmp_path / "index.json").write_text("{", "utf-8")
     assert main(["publish"]) == 1
-    assert name in capsys.readouterr().out
+    assert "index.json" in capsys.readouterr().out
     assert s3.puts == []
 
 
