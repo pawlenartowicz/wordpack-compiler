@@ -430,8 +430,11 @@ def _qualifies(cand: str, chars: Chars) -> bool:
 
 
 def _masked_match(c: str, us: int, o: _Opts):
-    run = o.chars.mask_run.match(c, us).group()
-    if "*" not in run:
+    # No masked word is longer than the longest by_len key, so read the run at most one
+    # character past it; reading the whole run from every letter unit is quadratic.
+    longest = max(o.by_len)
+    run = o.chars.mask_run.match(c, us, us + longest + 1).group()
+    if "*" not in run or len(run) > longest:
         return None
     low = o.chars.lower(run)
     if len(low) != len(run):

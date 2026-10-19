@@ -8,8 +8,8 @@
       "versions": {
         "1": {
           "file": "en-glove2024-dolma-1.wordpack",
-          "size": 380035428,
-          "sha256": "3e0af6cfba10e74d078b12f6a544ea841e8b81f34bff666baa26de7025a2a00f",
+          "size": 379271287,
+          "sha256": "44b93e64523751da3c6a43f9f80e1e05d96faccbd924dccd9438a9c34917441c",
           "format_version": 1
         }
       }
@@ -21,8 +21,8 @@
       "versions": {
         "1": {
           "file": "en-glove2024-wikigiga-1.wordpack",
-          "size": 408952008,
-          "sha256": "cc6a60839dd04aad5375607c18ccfe8e9fbc743ac8e7592b3df7cf8ac3484de4",
+          "size": 408754799,
+          "sha256": "e0a7b7c2ee51cc74864c8c3c20c47e353f2ba7ab7438e396c5ce1845ceebca67",
           "format_version": 1
         }
       }

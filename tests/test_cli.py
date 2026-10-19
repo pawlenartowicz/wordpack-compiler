@@ -121,12 +121,11 @@ def test_format_summary_aligns_numbers_and_shortens_reasons():
         "counts": {
             "lines": 1291147,
             "malformed line": 3,
-            "duplicate after NFC": 8,
+            "duplicate key": 8,
             "zero or non-finite row": 1,
             "empty key": 0,
             "odd new reason": 2,
         },
-        "uppercase keys": 0,
         "N": 1291133,
         "D": 300,
         "file size": 412_000_000,
@@ -137,10 +136,9 @@ def test_format_summary_aligns_numbers_and_shortens_reasons():
         "  rows read                   1,291,147\n"
         "  rows dropped                       14\n"
         "    malformed line                    3\n"
-        "    NFC duplicate                     8\n"
+        "    duplicate key                     8\n"
         "    zero or non-finite                1\n"
         "    odd new reason                    2\n"
-        "  uppercase keys                      0\n"
         "  N × D                 1,291,133 × 300\n"
         "  file size                      412 MB\n"
         "  time                             2:41"

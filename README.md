@@ -72,7 +72,8 @@ wordpack-compiler publish build/en-glove2024-dolma-1.wordpack
 ```
 
 `publish` runs the pack's self-test, uploads the pack, adds its version to
-`index.json`, and uploads `index.json`. A published
+`index.json`, and uploads `index.json`. It stops before uploading anything
+if the bucket's `index.json` lists a version the local one does not. A published
 file is never replaced: changed contents need a new build, which gets the
 next version. Commit `index.json` after publishing; its history is the
 record of what was published.
@@ -108,6 +109,8 @@ For now, a language can be added without code changes if:
 - its embedding stores surface forms, not lemmas (Polish NKJP embeddings, for
   example, store lemmas and need a form table the compiler does not build yet);
 - words are separated by spaces (not Chinese, Japanese or Thai);
+- its words contain no combining marks (Unicode categories Mn and Mc), since
+  the tokenizer ends a word at one (not Hindi or other Indic scripts);
 - the embedding's licence allows redistribution, since the pack contains its
   vectors.
 

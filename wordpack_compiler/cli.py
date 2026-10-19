@@ -89,7 +89,7 @@ def _publish(file: str | None) -> int:
     return 0
 
 
-_REASON_NAMES = {"duplicate after NFC": "NFC duplicate", "zero or non-finite row": "zero or non-finite"}
+_REASON_NAMES = {"zero or non-finite row": "zero or non-finite"}
 
 
 def format_summary(out_path, summary: dict) -> str:
@@ -100,7 +100,6 @@ def format_summary(out_path, summary: dict) -> str:
         (2, "rows read", format_count(counts["lines"])),
         (2, "rows dropped", format_count(sum(dropped.values()))),
         *[(4, _REASON_NAMES.get(k, k), format_count(v)) for k, v in dropped.items() if v > 0],
-        (2, "uppercase keys", format_count(summary["uppercase keys"])),
         (2, "N × D", f"{format_count(summary['N'])} × {summary['D']}"),
         (2, "file size", format_size(summary["file size"])),
         (2, "time", format_time(summary["seconds"])),

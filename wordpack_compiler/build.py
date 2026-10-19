@@ -160,23 +160,33 @@ def _lines_tensor(words: list[str]) -> np.ndarray:
     return np.frombuffer("".join(w + "\n" for w in words).encode("utf-8"), dtype=np.uint8)
 
 
-def kept_rows(source_zip, dims: int, counts: Counter):
-    """Yield (NFC key, float32 row, norm) for each source row a pack keeps, in file order.
+def kept_rows(source_zip, dims: int, counts: Counter, case_sensitive: bool):
+    """Yield (key, float32 row, norm) for each source row a pack keeps, in file order.
 
+    Keys are normalized as the reader normalizes text (NFC, then fold, then
+    lowercase in a case-insensitive pack), so a token can reach every key. Of keys that normalize alike the first row is
+    kept: GloVe rows are frequency-ordered, so it is the better-trained one.
     `build()` and `benchmarks/run.py` both read rows through this, so a pack
     and its source embedding have the same vocabulary. Dropped rows are
     counted in `counts`.
     """
+    chars = Chars(char_table())
     seen: set[str] = set()
     for key, row in read_glove_zip(source_zip, dims, counts):
-        key = unicodedata.normalize("NFC", key)
+        key = chars.fold(unicodedata.normalize("NFC", key))
+        if not case_sensitive:
+            key = chars.lower(key)
+        # Keys made only of format characters fold to nothing.
+        if not key.strip():
+            counts["empty key"] += 1
+            continue
         # GloVe's averaged unknown-word vector. No token reaches it (`<` is not a
         # letter), but it would turn up as a nearest neighbour.
         if key == "<unk>":
             counts["<unk> row"] += 1
             continue
         if key in seen:
-            counts["duplicate after NFC"] += 1
+            counts["duplicate key"] += 1
             continue
         norm = float(np.sqrt(np.dot(row.astype(np.float64), row)))
         # The norm is stored as float32, so one beyond its range is as unusable as inf.
@@ -213,7 +223,7 @@ def build(recipe_path, language_dir, source_zip, out_path, version: int) -> dict
     k = 0
     reading = Progress("[1/4] reading rows   ")
     reported = 0
-    for key, row, norm in kept_rows(source_zip, dims, counts):
+    for key, row, norm in kept_rows(source_zip, dims, counts, case_sensitive):
         if counts["lines"] // 100_000 > reported:
             reported = counts["lines"] // 100_000
             reading.update(f"{format_count(len(keys))} rows   {format_time(reading.elapsed())}")
@@ -290,7 +300,6 @@ def build(recipe_path, language_dir, source_zip, out_path, version: int) -> dict
     writing.done(f"{format_size(out_path.stat().st_size)}   {format_time(writing.elapsed())}")
     return {
         "counts": dict(counts),
-        "uppercase keys": 0 if case_sensitive else sum(key != key.lower() for key in keys),
         "N": len(q),
         "D": dims,
         "file size": out_path.stat().st_size,

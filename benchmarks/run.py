@@ -28,6 +28,7 @@ import pandas as pd
 from ssdiff import SSD, Corpus, Embeddings
 from ssdiff.lang_config import lang_to_model
 
+from wordpack_compiler import build as build_module, source as source_module
 from wordpack_compiler.build import kept_rows
 
 REPO = Path(__file__).resolve().parents[1]
@@ -63,6 +64,8 @@ class Arm(NamedTuple):
     load: Callable[[], Embeddings]
     tokens: Callable[[str, list[str], Embeddings], list[list[str]]]
     baseline: str | None = None
+    # Files the arm's rows come from. A saved fold older than one of them is refitted.
+    inputs: tuple[Path, ...] = ()
 
 
 def pack_tokens(dataset: str, texts: list[str], emb: Embeddings) -> list[list[str]]:
@@ -100,16 +103,17 @@ def source_rows(zip_path: Path, dims: int) -> tuple[list[str], np.ndarray]:
     """(keys, rows) of a GloVe zip that its pack keeps, before normalization.
 
     Saved once as a pickle of (keys, rows) at
-    `<zip stem>.pkl` next to the zip. Reading the 5 GB zip takes minutes;
-    loading the pickle takes seconds. ssdiff's own formats do not fit:
+    `<zip stem>.pkl` next to the zip, and rebuilt when `build.py` or
+    `source.py`, which choose the rows, is newer than it. Reading the 5 GB zip
+    takes minutes; loading the pickle takes seconds. ssdiff's own formats do not fit:
     .ssdembed does not load in ssdiff 3.2, and word2vec .bin ends a key at its first
     space, while GloVe keys may contain one.
     """
     cached = zip_path.with_suffix(".pkl")
-    if not cached.exists():
+    if not cached.exists() or cached.stat().st_mtime < max(Path(m.__file__).stat().st_mtime for m in (build_module, source_module)):
         print(f"reading {zip_path.name} (once, then cached as {cached.name}) ...", file=sys.stderr, flush=True)
         keys, rows = [], []
-        for key, row, _ in kept_rows(zip_path, dims, Counter()):
+        for key, row, _ in kept_rows(zip_path, dims, Counter(), case_sensitive=False):  # the English packs are case-insensitive
             keys.append(key)
             rows.append(row)
         rows = np.stack(rows)
@@ -137,8 +141,13 @@ def spacy_tokens(dataset: str, texts: list[str], emb: Embeddings) -> list[list[s
     cache. An edit to an ssdiff checkout that keeps its version does; delete
     the cache by hand then.
     """
+    try:
+        model_version = version(SPACY_MODEL)
+    except PackageNotFoundError:
+        # Corpus offers ssdiff's download; the cache name needs the model's version, so this run is not cached.
+        return Corpus(texts, lang="en").docs
     cache = REPO / "build" / "bench" / "cache" / (
-        f"{dataset}-{SPACY_MODEL}-{version(SPACY_MODEL)}-spacy{version('spacy')}-ssdiff{version('ssdiff')}.pkl"
+        f"{dataset}-{SPACY_MODEL}-{model_version}-spacy{version('spacy')}-ssdiff{version('ssdiff')}.pkl"
     )
     if cache.exists():
         return pickle.loads(cache.read_bytes())
@@ -171,9 +180,10 @@ def english_arms(recipe_names: list[str]) -> list[Arm]:
             raise FileNotFoundError(f"no build of {recipe['name']} in build/: run `wordpack-compiler build en/{recipe_name}`")
         pack_path = builds[-1]
         short = recipe_name.removeprefix("glove2024-")
-        arms.append(Arm(f"spacy-{short}", functools.partial(load_source, zip_path, int(recipe["dims"])), spacy_tokens))
+        arms.append(Arm(f"spacy-{short}", functools.partial(load_source, zip_path, int(recipe["dims"])), spacy_tokens,
+                        inputs=(zip_path.with_suffix(".pkl"),)))
         arms.append(Arm(f"pack-{short}", functools.partial(Embeddings.load, str(pack_path)), pack_tokens,
-                        baseline=f"spacy-{short}"))
+                        baseline=f"spacy-{short}", inputs=(pack_path,)))
     return arms
 
 
@@ -214,9 +224,12 @@ def run_arm(arm: Arm, datasets: dict, folds: dict, out_dir: Path) -> tuple:
                 train = train[hv[train]]
                 # Each fold's (k, test predictions) per model is saved as soon
                 # as the fold ends, so a stopped run restarted into the same
-                # out_dir fits only the folds and models it has not saved.
+                # out_dir fits only the folds and models it has not saved. A
+                # fold saved before one of the arm's inputs was last written
+                # is refitted.
                 saved = out_dir / "folds" / f"{arm.name}-{b}-{outcome}-{f}.pkl"
-                done = pickle.loads(saved.read_bytes()) if saved.exists() else {}
+                fresh = saved.exists() and all(p.stat().st_mtime < saved.stat().st_mtime for p in arm.inputs)
+                done = pickle.loads(saved.read_bytes()) if fresh else {}
                 todo = [m for m in MODELS if m not in done]
                 if todo:
                     print(f"{arm.name}  {b}  {outcome}  fold {f + 1}/{len(folds[b])}", file=sys.stderr, flush=True)

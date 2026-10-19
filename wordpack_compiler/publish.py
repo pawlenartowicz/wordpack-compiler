@@ -130,6 +130,24 @@ def publish(pack_path: Path | None, client, bucket: str, repo: Path) -> None:
     """
     index_path = repo / "index.json"
     index = _read_json(index_path)
+    # The upload replaces the bucket's index, so a stale local one would drop published versions.
+    try:
+        published = json.loads(client.get_object(Bucket=bucket, Key=PREFIX + "index.json")["Body"].read())
+    except client.exceptions.ClientError as e:
+        if e.response["Error"]["Code"] != "NoSuchKey":
+            raise
+        published = {"packs": {}}
+    missing = [
+        f"{name}-{version}"
+        for name, pack in published["packs"].items()
+        for version in pack["versions"]
+        if version not in index["packs"].get(name, {}).get("versions", {})
+    ]
+    if missing:
+        raise PublishError(
+            f"the bucket's index.json lists {', '.join(missing)}, which {index_path} does not. "
+            "Update the repository and run publish again."
+        )
     if pack_path is not None:
         _publish_pack(Path(pack_path), client, bucket, index)
         index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", "utf-8")

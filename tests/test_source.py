@@ -66,3 +66,8 @@ def test_download_refuses_a_cut_download(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="100 of 1,000 bytes"):
         download("http://invalid.invalid/x.zip", dest)
     assert not dest.exists()
+
+
+def test_dims_must_match_the_first_line(tmp_path):
+    with pytest.raises(ValueError, match="dims = 2"):
+        list(read_glove_zip(_zip(tmp_path, b"the 1 2 3\n"), 2, Counter()))

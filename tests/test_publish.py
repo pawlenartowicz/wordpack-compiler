@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import struct
 import types
@@ -40,6 +41,11 @@ class FakeS3:
             raise self.ClientError("404")
         body, metadata = self.objects[Key]
         return {"ContentLength": len(body), "Metadata": metadata}
+
+    def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise self.ClientError("NoSuchKey")
+        return {"Body": io.BytesIO(self.objects[Key][0])}
 
     def put_object(self, Bucket, Key, Body, ContentType, Metadata=None):
         self.objects[Key] = (Body if isinstance(Body, bytes) else Body.read(), Metadata or {})
@@ -132,6 +138,17 @@ def test_publish_with_no_file_uploads_only_the_index(pack_path, tmp_path):
     s3 = FakeS3()
     publish(None, s3, "bucket", repo)
     assert s3.puts == [INDEX_KEY]
+    assert (repo / "index.json").read_bytes() == before
+
+
+def test_publish_refuses_a_local_index_missing_a_published_version(pack_path, tmp_path):
+    repo = write_repo(tmp_path)
+    before = (repo / "index.json").read_bytes()
+    s3 = FakeS3()
+    s3.objects[INDEX_KEY] = (json.dumps({"index_version": 1, "packs": {"pl-other": OTHER}}).encode(), {})
+    with pytest.raises(PublishError, match="pl-other-3"):
+        publish(pack_path, s3, "bucket", repo)
+    assert s3.puts == []
     assert (repo / "index.json").read_bytes() == before
 
 

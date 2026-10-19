@@ -65,11 +65,11 @@ def test_rows_dropped_and_kept(tmp_path):
     assert summary["counts"] == {
         "lines": 52,
         "malformed line": 1,
-        "duplicate after NFC": 1,
+        "duplicate key": 1,
         "zero or non-finite row": 1,
         "<unk> row": 1,
     }
-    assert summary["N"] == 48 and summary["D"] == 16 and summary["uppercase keys"] == 0
+    assert summary["N"] == 48 and summary["D"] == 16
     t = load_file(tmp_path / "p.wordpack")
     keys = bytes(t["vocab"]).decode("utf-8").split("\n")[:-1]
     assert keys == fixture.KEYS  # the NFC form of café that came first won
@@ -183,12 +183,46 @@ def test_stopword_is_folded_with_the_pack_table(tmp_path):
 def test_kept_rows_are_the_rows_a_pack_keeps(tmp_path):
     _, _, zip_path = fixture.write_source(tmp_path)
     counts = Counter()
-    keys = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, counts)]
+    keys = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, counts, False)]
     assert keys == fixture.KEYS
     assert counts == Counter({
         "lines": 52,
         "malformed line": 1,
-        "duplicate after NFC": 1,
+        "duplicate key": 1,
         "zero or non-finite row": 1,
         "<unk> row": 1,
     })
+
+
+def test_keys_are_folded_and_the_first_of_each_is_kept(tmp_path):
+    recipe, lang, zip_path = fixture.write_source(tmp_path)
+    with zipfile.ZipFile(zip_path) as zf:
+        lines = zf.read("vectors.txt").decode().splitlines()
+    row = lambda key, v: key + " " + " ".join([v] * fixture.DIMS)
+    # "‍" is a format character: it folds to nothing.
+    extra = [row("’s", "0.75"), row("‍", "0.5")]
+    for name, merged in (("after", lines + extra), ("before", extra + lines)):
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("vectors.txt", "\n".join(merged) + "\n")
+        counts = Counter()
+        rows = {key: r for key, r, _ in kept_rows(zip_path, fixture.DIMS, counts, False)}
+        assert counts["empty key"] == 1 and counts["duplicate key"] == 2
+        assert list(rows).count("'s") == 1 and "’s" not in rows and "" not in rows
+        assert (rows["'s"] == 0.75).all() == (name == "before")
+        summary = build(recipe, lang, zip_path, tmp_path / f"{name}.wordpack", 1)
+        keys = bytes(load_file(tmp_path / f"{name}.wordpack")["vocab"]).decode().split("\n")[:-1]
+        assert keys.count("'s") == 1 and "" not in keys and summary["N"] == 48
+
+
+def test_keys_are_lowercased_in_a_case_insensitive_pack(tmp_path):
+    _, _, zip_path = fixture.write_source(tmp_path)
+    with zipfile.ZipFile(zip_path) as zf:
+        lines = zf.read("vectors.txt").decode().splitlines()
+    # "Ꭲ" is a Cherokee capital whose lowercase is "ꭲ".
+    extra = [key + " " + " ".join(["0.5"] * fixture.DIMS) for key in ("The", "Ꭲhe")]
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("vectors.txt", "\n".join(lines + extra) + "\n")
+    insensitive = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, Counter(), False)]
+    assert insensitive == fixture.KEYS + ["ꭲhe"]
+    sensitive = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, Counter(), True)]
+    assert sensitive == fixture.KEYS + ["The", "Ꭲhe"]

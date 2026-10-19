@@ -141,7 +141,8 @@ the whole `m = 0` matrix, up to float32 error.
 
 The lookup table is part of the file, so a reader builds no dictionary:
 
-- Keys are unique after NFC; the compiler drops later duplicates.
+- Keys are unique after NFC, fold and, when `case_sensitive` is false,
+  lowercasing; the compiler drops later duplicates.
 - A reader finds a key's row by binary search over `vocab_order`, comparing
   UTF-8 bytes, not locale-aware strings, so Python and R agree on the order.
 - The start of each key in `vocab` comes from the positions of the `\n`

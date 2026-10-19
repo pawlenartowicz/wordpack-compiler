@@ -64,8 +64,8 @@ def download(url: str, dest: Path) -> None:
 def read_glove_zip(path, dims: int, counts: Counter):
     """Yield (key, float32 row) from the one text file in a GloVe zip, in file order.
 
-    Lines split from the right, so a key containing a space survives. Skipped
-    lines are counted in `counts`.
+    Lines split from the right, so a key containing a space survives. The first
+    line must hold `dims` numbers. Skipped lines are counted in `counts`.
     """
     with zipfile.ZipFile(path) as zf:
         members = [m for m in zf.infolist() if not m.is_dir()]
@@ -74,6 +74,9 @@ def read_glove_zip(path, dims: int, counts: Counter):
         with zf.open(members[0]) as fh:
             for raw in fh:
                 counts["lines"] += 1
+                # GloVe's first key has no space, so its line shows the file's dims.
+                if counts["lines"] == 1 and raw.rstrip().count(b" ") != dims:
+                    raise ValueError(f"{path}: the first line has {raw.rstrip().count(b' ')} numbers; the recipe says dims = {dims}")
                 parts = raw.rstrip().rsplit(b" ", dims)
                 if len(parts) != dims + 1:
                     counts["malformed line"] += 1
