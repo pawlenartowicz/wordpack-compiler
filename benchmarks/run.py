@@ -1,8 +1,4 @@
-"""Coverage and cross-validated R² for each English wordpack next to its source embedding.
-
-Each pack is compared with its own GloVe source run through ssdiff's spaCy
-route (en_core_web_lg lemmas, ssdiff's stopwords), so a difference between the
-two comes from the pack pipeline alone.
+"""Coverage and cross-validated R² for each English wordpack.
 
     python benchmarks/run.py warriner hate_speech
 """
@@ -17,7 +13,6 @@ import pickle
 import re
 import sys
 import tomllib
-from collections import Counter
 from datetime import date
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -25,24 +20,19 @@ from typing import Callable, NamedTuple
 
 import numpy as np
 import pandas as pd
-from ssdiff import SSD, Corpus, Embeddings
-from ssdiff.lang_config import lang_to_model
-
-from wordpack_compiler import build as build_module, source as source_module
-from wordpack_compiler.build import kept_rows
+from ssdiff import SSD, Embeddings
 
 REPO = Path(__file__).resolve().parents[1]
 SEED = 2137
 N_FOLDS = 10
-SPACY_MODEL = lang_to_model("en")
 
 MODELS = {
-    "pls-auto": lambda ssd: ssd.fit_pls(k="auto", test=False),
-    "pls-1": lambda ssd: ssd.fit_pls(k=1, test=False),
-    "pls-3": lambda ssd: ssd.fit_pls(k=3, test=False),
-    "ols-auto": lambda ssd: ssd.fit_ols(),
-    "ols-20": lambda ssd: ssd.fit_ols(fixed_k=20),
-    "ols-40": lambda ssd: ssd.fit_ols(fixed_k=40),
+    "pls-auto": lambda ssd, y: ssd.fit_pls(y, k="auto", test=False),
+    "pls-1": lambda ssd, y: ssd.fit_pls(y, k=1, test=False),
+    "pls-3": lambda ssd, y: ssd.fit_pls(y, k=3, test=False),
+    "ols-auto": lambda ssd, y: ssd.fit_regression(y),
+    "ols-20": lambda ssd, y: ssd.fit_regression(y, fixed_k=20),
+    "ols-40": lambda ssd, y: ssd.fit_regression(y, fixed_k=40),
 }
 # The auto models are left out unless named with --models. Each call is
 # hundreds of PLS fits (pls-auto's split search) or 60 PCA K values with
@@ -69,7 +59,7 @@ class Arm(NamedTuple):
 
 
 def pack_tokens(dataset: str, texts: list[str], emb: Embeddings) -> list[list[str]]:
-    return Corpus(texts, embeddings=emb).docs
+    return SSD(emb, texts).docs
 
 
 def load_warriner() -> tuple[list[str], dict[str, np.ndarray]]:
@@ -99,73 +89,10 @@ def load_hate_speech() -> tuple[list[str], dict[str, np.ndarray]]:
 DATASETS = {"warriner": load_warriner, "hate_speech": load_hate_speech}
 
 
-def source_rows(zip_path: Path, dims: int) -> tuple[list[str], np.ndarray]:
-    """(keys, rows) of a GloVe zip that its pack keeps, before normalization.
-
-    Saved once as a pickle of (keys, rows) at
-    `<zip stem>.pkl` next to the zip, and rebuilt when `build.py` or
-    `source.py`, which choose the rows, is newer than it. Reading the 5 GB zip
-    takes minutes; loading the pickle takes seconds. ssdiff's own formats do not fit:
-    .ssdembed does not load in ssdiff 3.2, and word2vec .bin ends a key at its first
-    space, while GloVe keys may contain one.
-    """
-    cached = zip_path.with_suffix(".pkl")
-    if not cached.exists() or cached.stat().st_mtime < max(Path(m.__file__).stat().st_mtime for m in (build_module, source_module)):
-        print(f"reading {zip_path.name} (once, then cached as {cached.name}) ...", file=sys.stderr, flush=True)
-        keys, rows = [], []
-        for key, row, _ in kept_rows(zip_path, dims, Counter(), case_sensitive=False):  # the English packs are case-insensitive
-            keys.append(key)
-            rows.append(row)
-        rows = np.stack(rows)
-        # Written through .part, so a run killed mid-write leaves no cut-off cache.
-        part = cached.with_name(cached.name + ".part")
-        with open(part, "wb") as f:
-            pickle.dump((keys, rows), f, protocol=pickle.HIGHEST_PROTOCOL)
-        os.replace(part, cached)
-    else:
-        with open(cached, "rb") as f:
-            keys, rows = pickle.load(f)
-    return keys, rows
-
-
-def load_source(zip_path: Path, dims: int) -> Embeddings:
-    """The rows of a GloVe zip that its pack keeps, at L2 + ABTT 1."""
-    return Embeddings(*source_rows(zip_path, dims)).normalize(l2=True, abtt=1)
-
-
-def spacy_tokens(dataset: str, texts: list[str], emb: Embeddings) -> list[list[str]]:
-    """ssdiff's spaCy route, cached per dataset and shared by both spaCy arms.
-
-    The versions are in the file name, so a release that changes spaCy's
-    tokenizer or stopwords, or ssdiff's token filter, never reads an old
-    cache. An edit to an ssdiff checkout that keeps its version does; delete
-    the cache by hand then.
-    """
-    try:
-        model_version = version(SPACY_MODEL)
-    except PackageNotFoundError:
-        # Corpus offers ssdiff's download; the cache name needs the model's version, so this run is not cached.
-        return Corpus(texts, lang="en").docs
-    cache = REPO / "build" / "bench" / "cache" / (
-        f"{dataset}-{SPACY_MODEL}-{model_version}-spacy{version('spacy')}-ssdiff{version('ssdiff')}.pkl"
-    )
-    if cache.exists():
-        return pickle.loads(cache.read_bytes())
-    print(f"spaCy over {len(texts):,} {dataset} items (once, then cached) ...", file=sys.stderr, flush=True)
-    docs = Corpus(texts, lang="en").docs
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    # Through .part, as in source_rows.
-    part = cache.with_name(cache.name + ".part")
-    part.write_bytes(pickle.dumps(docs, protocol=pickle.HIGHEST_PROTOCOL))
-    os.replace(part, cache)
-    return docs
-
-
 def english_arms(recipe_names: list[str]) -> list[Arm]:
     arms = []
     for recipe_name in recipe_names:
         recipe = tomllib.loads((REPO / "languages" / "en" / f"{recipe_name}.toml").read_text("utf-8"))
-        zip_path = REPO / "build" / "sources" / recipe["url"].rsplit("/", 1)[-1]
         # `build` puts the version in the file name; the benchmark runs the newest build.
         # The glob also matches other files, and packs whose name starts with this one.
         builds = sorted(
@@ -180,17 +107,8 @@ def english_arms(recipe_names: list[str]) -> list[Arm]:
             raise FileNotFoundError(f"no build of {recipe['name']} in build/: run `wordpack-compiler build en/{recipe_name}`")
         pack_path = builds[-1]
         short = recipe_name.removeprefix("glove2024-")
-        arms.append(Arm(f"spacy-{short}", functools.partial(load_source, zip_path, int(recipe["dims"])), spacy_tokens,
-                        inputs=(zip_path.with_suffix(".pkl"),)))
-        arms.append(Arm(f"pack-{short}", functools.partial(Embeddings.load, str(pack_path)), pack_tokens,
-                        baseline=f"spacy-{short}", inputs=(pack_path,)))
+        arms.append(Arm(f"pack-{short}", functools.partial(Embeddings.load, str(pack_path)), pack_tokens, inputs=(pack_path,)))
     return arms
-
-
-def _corpus(docs: list[list[str]], idx: np.ndarray) -> Corpus:
-    # Corpus cannot take a subset. Without lang, fit_ols()'s PCA sweep raises on
-    # embeddings that are not a wordpack.
-    return Corpus([docs[i] for i in idx], pretokenized=True, lang="en")
 
 
 def run_arm(arm: Arm, datasets: dict, folds: dict, out_dir: Path) -> tuple:
@@ -233,18 +151,18 @@ def run_arm(arm: Arm, datasets: dict, folds: dict, out_dir: Path) -> tuple:
                 todo = [m for m in MODELS if m not in done]
                 if todo:
                     print(f"{arm.name}  {b}  {outcome}  fold {f + 1}/{len(folds[b])}", file=sys.stderr, flush=True)
-                    ssd = SSD(emb, _corpus(docs, train), y[train], use_full_doc=True, sif_a=None)
-                    test_corpus = _corpus(docs, test)
+                    ssd = SSD(emb, [docs[i] for i in train], use_full_doc=True, sif_a=None)
+                    test_docs = [docs[i] for i in test]
                 for model in todo:
                     try:
-                        result = MODELS[model](ssd)
+                        result = MODELS[model](ssd, y[train])
                     except ValueError as e:
                         if "found no component" not in str(e):
                             raise
                         done[model] = (0, None)
                     else:
                         k = result.pca_k if model.startswith("ols") else result.n_components
-                        p = result.predict(test_corpus)
+                        p = result.predict(test_docs)
                         # Shared R² is taken over the has-vector masks, so they
                         # must be exactly the items predict() scores.
                         if not np.array_equal(np.isfinite(p), hv[test]):
@@ -324,8 +242,7 @@ def _summary(res: pd.DataFrame, arms: list[Arm], packs: list[str], n_folds: int)
     lines = [
         "# Benchmark",
         "",
-        f"ssdiff {_version('ssdiff')} · plskit {_version('plskit')} · spaCy {_version('spacy')} · "
-        f"{SPACY_MODEL} {_version(SPACY_MODEL)}",
+        f"ssdiff {_version('ssdiff')} · plskit {_version('plskit')}",
         f"packs: {', '.join(packs)}",
         f"seed {SEED} · {n_folds} folds",
         "",
@@ -377,12 +294,12 @@ def _md(df: pd.DataFrame) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Wordpack benchmark: coverage and CV R² against the spaCy route.")
+    parser = argparse.ArgumentParser(description="Wordpack benchmark: coverage and CV R².")
     parser.add_argument("benchmarks", nargs="+", choices=list(DATASETS))
     parser.add_argument("--models", nargs="+", choices=list(MODELS), default=DEFAULT_MODELS,
                         help=f"models to fit (default: {' '.join(DEFAULT_MODELS)})")
     parser.add_argument("--packs", nargs="+", choices=["dolma", "wikigiga"], default=["dolma"],
-                        help="English packs to run, each with its spaCy baseline (default: dolma)")
+                        help="English packs to run (default: dolma)")
     args = parser.parse_args(argv)
     for model in list(MODELS):
         if model not in args.models:

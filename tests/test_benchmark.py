@@ -57,11 +57,11 @@ def test_run_writes_three_files(pack_path, tmp_path):
 
     summary = (tmp_path / "summary.md").read_text("utf-8")
     assert summary.startswith("# Benchmark")
-    assert "en-fixture-1" in summary and "seed 2137" in summary
+    assert "test-1" in summary and "seed 2137" in summary
 
 
 def test_no_component_is_recorded(pack_path, tmp_path, monkeypatch):
-    def no_component(ssd):
+    def no_component(ssd, y):
         raise ValueError("fit_pls(k='auto'): plskit found no component (k_star = 0); y shows no signal in X.")
 
     monkeypatch.setitem(bench.MODELS, "pls-auto", no_component)
@@ -73,7 +73,7 @@ def test_no_component_is_recorded(pack_path, tmp_path, monkeypatch):
 
 
 def test_other_errors_stop_the_run(pack_path, tmp_path, monkeypatch):
-    def broken(ssd):
+    def broken(ssd, y):
         raise ValueError("something else")
 
     monkeypatch.setitem(bench.MODELS, "pls-auto", broken)
@@ -88,11 +88,11 @@ def test_restart_refits_only_unsaved_folds(pack_path, tmp_path, monkeypatch):
     real = bench.MODELS["pls-1"]
     calls = []
 
-    def stop_at_third(ssd):
+    def stop_at_third(ssd, y):
         calls.append(1)
         if len(calls) == 3:  # pack-a's two folds are done; pack-b's first is not
             raise KeyboardInterrupt
-        return real(ssd)
+        return real(ssd, y)
 
     out = tmp_path / "resumed"
     monkeypatch.setitem(bench.MODELS, "pls-1", stop_at_third)
@@ -100,7 +100,7 @@ def test_restart_refits_only_unsaved_folds(pack_path, tmp_path, monkeypatch):
         bench.run(pack_arms(pack_path), tiny_dataset(), 2, out)
 
     calls.clear()
-    monkeypatch.setitem(bench.MODELS, "pls-1", lambda ssd: (calls.append(1), real(ssd))[1])
+    monkeypatch.setitem(bench.MODELS, "pls-1", lambda ssd, y: (calls.append(1), real(ssd, y))[1])
     bench.run(pack_arms(pack_path), tiny_dataset(), 2, out)
     assert len(calls) == 2  # pack-b's two folds only
     pd.testing.assert_frame_equal(pd.read_csv(out / "results.csv"), pd.read_csv(fresh / "results.csv"))
@@ -114,7 +114,7 @@ def test_warriner_keeps_null():
 
 
 def test_one_arm_in_memory_at_a_time(pack_path, tmp_path):
-    # Plain Embeddings, as the spaCy arms load: their fit results hold the
+    # Plain Embeddings, not a pack: their fit results hold the
     # embeddings inside reference cycles. Automatic collection is off, so only
     # run()'s own cleanup can free one arm before the next loads.
     import gc

@@ -1,8 +1,8 @@
 """Wall-clock time of tokenizing a corpus with a wordpack, natively or under Pyodide.
 
 Two stages, each on a freshly opened pack (the key-to-row cache starts empty):
-`tokenize`, the reader alone (`pack.tokenize` per text), and `corpus`,
-ssdiff's `Corpus(texts, embeddings=emb)`, which adds stopwords, per-sentence
+`tokenize`, the reader alone (`pack.tokenize` per text), and `ssd`,
+ssdiff's `SSD(emb, texts)`, which adds stopwords, per-sentence
 lists and flat docs. The first run is discarded; report the minimum of the rest.
 
     python benchmarks/tokenize_speed.py build/en-glove2024-wikigiga-1.wordpack
@@ -44,7 +44,7 @@ def main() -> None:
     a = ap.parse_args()
 
     import ssdiff
-    from ssdiff import Corpus, Embeddings
+    from ssdiff import SSD, Embeddings
     from ssdiff.wordpack.reader import WordPack
 
     texts = load_texts()
@@ -56,14 +56,14 @@ def main() -> None:
             toks = [pack.tokenize(s) for s in texts]
             return time.perf_counter() - t, sum(len(x.keys) for x in toks)
 
-    def stage_corpus():
+    def stage_ssd():
         emb = Embeddings.load(a.pack)
         t = time.perf_counter()
-        corpus = Corpus(texts, embeddings=emb)
-        return time.perf_counter() - t, sum(map(len, corpus.docs))
+        ssd = SSD(emb, texts)
+        return time.perf_counter() - t, sum(map(len, ssd.docs))
 
     rows = []
-    for name, fn in (("tokenize", stage_tokenize), ("corpus", stage_corpus)):
+    for name, fn in (("tokenize", stage_tokenize), ("ssd", stage_ssd)):
         for run in range(a.runs):
             secs, n_tokens = fn()
             rows.append({"stage": name, "run": run, "seconds": secs, "n_tokens": n_tokens})
@@ -87,11 +87,11 @@ def main() -> None:
         for r in rows:
             w.writerow({**meta, **r})
 
-    for name in ("tokenize", "corpus"):
+    for name in ("tokenize", "ssd"):
         kept = [r for r in rows if r["stage"] == name][1:]
         best = min(kept, key=lambda r: r["seconds"])
         # n_tokens is every key for `tokenize` but only the kept tokens for
-        # `corpus` (stopwords dropped), so the rates compare texts and chars.
+        # `ssd` (stopwords dropped), so the rates compare texts and chars.
         print(f"{name}: min {best['seconds']:.2f} s over runs 1..{a.runs - 1}, "
               f"{len(texts) / best['seconds']:,.0f} texts/s, "
               f"{n_chars / best['seconds'] / 1e6:.2f} M chars/s, {best['n_tokens']:,} tokens")

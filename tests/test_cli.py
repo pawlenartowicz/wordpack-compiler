@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parents[1]
 def test_info_prints_and_passes(pack_path, capsys):
     assert main(["info", str(pack_path)]) == 0
     out = capsys.readouterr().out
-    assert "en-fixture" in out and "matrix" in out and "self-test: passed" in out
+    assert "test" in out and "matrix" in out and "self-test: passed" in out
 
 
 def test_info_fails_on_corrupt_pack(pack_path, tmp_path, capsys):
@@ -88,23 +88,23 @@ def _repo(directory, packs: dict) -> Path:
     "packs, expected",
     [
         ({"pl-other": {"versions": {"7": {}}}}, 1),
-        ({"en-fixture": {"versions": {"1": {}, "2": {}, "10": {}}}}, 11),
+        ({"test": {"versions": {"1": {}, "2": {}, "10": {}}}}, 11),
     ],
 )
 def test_build_takes_the_next_version_from_the_index(tmp_path, monkeypatch, packs, expected):
     monkeypatch.setattr(cli, "REPO", _repo(tmp_path, packs))
     assert main(["build", "en/fix"]) == 0
-    with WordPack(tmp_path / "build" / f"en-fixture-{expected}.wordpack") as pack:
+    with WordPack(tmp_path / "build" / f"test-{expected}.wordpack") as pack:
         assert pack.meta["version"] == str(expected)
 
 
 def test_build_refuses_a_recipe_name_that_reads_as_a_full_name(tmp_path, monkeypatch, capsys):
     repo = _repo(tmp_path, {})
     recipe = repo / "languages" / "en" / "fix.toml"
-    recipe.write_text(recipe.read_text("utf-8").replace('"en-fixture"', '"en-fixture-2"'), "utf-8")
+    recipe.write_text(recipe.read_text("utf-8").replace('"test"', '"test-2"'), "utf-8")
     monkeypatch.setattr(cli, "REPO", repo)
     assert main(["build", "en/fix"]) == 1
-    assert "en-fixture-2" in capsys.readouterr().out
+    assert "test-2" in capsys.readouterr().out
     assert not list((repo / "build").glob("*.wordpack"))
 
 

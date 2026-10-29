@@ -1,6 +1,6 @@
 """Synthetic source embedding and language folder for tests.
 
-Run as a script, `python tests/fixture.py OUT`, to write OUT/fixture.wordpack.
+Run as a script, `python tests/fixture.py OUT`, to write OUT/test.wordpack.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def write_source(directory, case_sensitive: bool = False) -> tuple[Path, Path, P
 
     recipe = d / "recipe.toml"
     recipe.write_text(
-        f'name = "en-fixture{"-cased" if case_sensitive else ""}"\n'
+        f'name = "test{"-cased" if case_sensitive else ""}"\n'
         'description = "Synthetic test pack."\nurl = "file:///nonexistent"\n'
         f'dims = {DIMS}\nlicense = "CC0-1.0"\ncitation = "none"\n',
         encoding="utf-8",
@@ -92,7 +92,7 @@ def write_source(directory, case_sensitive: bool = False) -> tuple[Path, Path, P
 
 def build_fixture(directory, case_sensitive: bool = False) -> Path:
     recipe, lang, zip_path = write_source(directory, case_sensitive)
-    out = Path(directory) / "fixture.wordpack"
+    out = Path(directory) / "test.wordpack"
     build(recipe, lang, zip_path, out, 1)
     return out
 
@@ -101,5 +101,5 @@ if __name__ == "__main__":
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as work:
-        shutil.move(build_fixture(work), out_dir / "fixture.wordpack")
-    print(out_dir / "fixture.wordpack")
+        shutil.move(build_fixture(work), out_dir / "test.wordpack")
+    print(out_dir / "test.wordpack")

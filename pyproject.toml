@@ -17,7 +17,7 @@ dependencies = ["numpy>=1.26.4"]
 
 [project.optional-dependencies]
 test = ["pytest", "safetensors"]
-bench = ["ssdiff[spacy]>=3.2.0", "pandas", "pyarrow"]
+bench = ["ssdiff>=3.2.0", "pandas", "pyarrow"]
 publish = ["boto3>=1.36"]
 
 [project.scripts]

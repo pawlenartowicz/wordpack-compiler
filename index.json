@@ -26,6 +26,19 @@
           "format_version": 1
         }
       }
+    },
+    "test": {
+      "language": "en",
+      "description": "Synthetic test pack.",
+      "license": "CC0-1.0",
+      "versions": {
+        "1": {
+          "file": "test-1.wordpack",
+          "size": 67512,
+          "sha256": "0f83611d74e01eea7b4bfc1536dfe06a96d26638ffcafe22af742287bcbe7814",
+          "format_version": 1
+        }
+      }
     }
   }
 }

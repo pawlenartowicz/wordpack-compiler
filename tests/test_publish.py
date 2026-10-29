@@ -13,7 +13,7 @@ from wordpack_compiler.cli import main
 from wordpack_compiler.publish import PublishError, publish
 from wordpack_compiler.reader import WordPackError, read_header
 
-PACK_KEY = "wordpacks/en-fixture-1.wordpack"
+PACK_KEY = "wordpacks/test-1.wordpack"
 INDEX_KEY = "wordpacks/index.json"
 OTHER = {
     "language": "pl",
@@ -60,7 +60,7 @@ def write_repo(directory, packs=None):
 def version_entry(pack_path) -> dict:
     data = pack_path.read_bytes()
     return {
-        "file": "en-fixture-1.wordpack",
+        "file": "test-1.wordpack",
         "size": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
         "format_version": 1,
@@ -84,7 +84,7 @@ def test_publish_uploads_the_pack_then_the_index(pack_path, tmp_path):
     assert s3.objects[PACK_KEY] == (pack_path.read_bytes(), {"sha256": version_entry(pack_path)["sha256"]})
     assert json.loads((repo / "index.json").read_text("utf-8")) == {
         "index_version": 1,
-        "packs": {"pl-other": OTHER, "en-fixture": fixture_pack(pack_path)},
+        "packs": {"pl-other": OTHER, "test": fixture_pack(pack_path)},
     }
     assert s3.objects[INDEX_KEY][0] == (repo / "index.json").read_bytes()
 
@@ -95,7 +95,7 @@ def test_publish_skips_the_upload_when_the_same_pack_is_in_the_bucket(pack_path,
     s3.objects[PACK_KEY] = (pack_path.read_bytes(), {"sha256": version_entry(pack_path)["sha256"]})
     publish(pack_path, s3, "bucket", repo)
     assert s3.puts == [INDEX_KEY]
-    assert json.loads((repo / "index.json").read_text("utf-8"))["packs"] == {"en-fixture": fixture_pack(pack_path)}
+    assert json.loads((repo / "index.json").read_text("utf-8"))["packs"] == {"test": fixture_pack(pack_path)}
 
 
 def test_publish_refuses_a_pack_that_fails_its_self_test(pack_path, tmp_path):
@@ -133,7 +133,7 @@ def test_publish_never_replaces_a_published_file(pack_path, tmp_path, stored):
 
 
 def test_publish_with_no_file_uploads_only_the_index(pack_path, tmp_path):
-    repo = write_repo(tmp_path, packs={"en-fixture": fixture_pack(pack_path)})
+    repo = write_repo(tmp_path, packs={"test": fixture_pack(pack_path)})
     before = (repo / "index.json").read_bytes()
     s3 = FakeS3()
     publish(None, s3, "bucket", repo)

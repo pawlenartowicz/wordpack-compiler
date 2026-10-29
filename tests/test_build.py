@@ -35,7 +35,7 @@ def test_metadata(pack_path):
     assert meta == {
         "format": "wordpack",
         "format_version": "1",
-        "name": "en-fixture",
+        "name": "test",
         "version": "1",
         "description": "Synthetic test pack.",
         "source": json.dumps({"url": "file:///nonexistent", "license": "CC0-1.0", "citation": "none"}),

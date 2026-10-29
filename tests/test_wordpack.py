@@ -25,7 +25,7 @@ def _rewrite_meta(src, dst, **changes):
 
 def test_open(pack_path):
     with WordPack(pack_path) as pack:
-        assert pack.meta["name"] == "en-fixture"
+        assert pack.meta["name"] == "test"
         assert pack.meta["case_sensitive"] is False
         assert pack.meta["clitics"] == fixture.CLITICS
         assert pack.meta["source"]["license"] == "CC0-1.0"
@@ -102,7 +102,7 @@ def test_selftest_passes(pack_path, cased_pack_path):
 def test_selftest_fails_on_changed_row_id(pack_path):
     with WordPack(pack_path) as pack:
         pack._selftest["texts"][0]["rows"][0] += 1
-        with pytest.raises(WordPackError, match=r"en-fixture-1 \(.*self-test failed"):
+        with pytest.raises(WordPackError, match=r"test-1 \(.*self-test failed"):
             pack.selftest()
 
 
