@@ -161,14 +161,13 @@ def _lines_tensor(words: list[str]) -> np.ndarray:
 
 
 def kept_rows(source_zip, dims: int, counts: Counter, case_sensitive: bool):
-    """Yield (key, float32 row, norm) for each source row a pack keeps, in file order.
+    """Yield (key, float32 row, norm) for each usable source row, in file order.
 
     Keys are normalized as the reader normalizes text (NFC, then fold, then
     lowercase in a case-insensitive pack), so a token can reach every key. Of keys that normalize alike the first row is
     kept: GloVe rows are frequency-ordered, so it is the better-trained one.
-    `build()` and `benchmarks/run.py` both read rows through this, so a pack
-    and its source embedding have the same vocabulary. Dropped rows are
-    counted in `counts`.
+    Dropped rows are counted in `counts`. `build()` then also drops the keys
+    no text tokenizes to (`reachable()`).
     """
     chars = Chars(char_table())
     seen: set[str] = set()
@@ -180,11 +179,6 @@ def kept_rows(source_zip, dims: int, counts: Counter, case_sensitive: bool):
         if not key.strip():
             counts["empty key"] += 1
             continue
-        # GloVe's averaged unknown-word vector. No token reaches it (`<` is not a
-        # letter), but it would turn up as a nearest neighbour.
-        if key == "<unk>":
-            counts["<unk> row"] += 1
-            continue
         if key in seen:
             counts["duplicate key"] += 1
             continue
@@ -195,6 +189,20 @@ def kept_rows(source_zip, dims: int, counts: Counter, case_sensitive: bool):
             continue
         seen.add(key)
         yield key, row, norm
+
+
+def reachable(keys: list[str], chars: Chars, case_sensitive: bool, clitics, masked) -> np.ndarray:
+    """Boolean mask of the keys that tokenizing the key itself returns.
+
+    The rest (punctuation, bare numbers, `etc.`, GloVe's `<unk>`) no text can
+    produce, so in a pack they would only turn up as nearest neighbours.
+    Dropping them leaves every tokenization unchanged: a key that is never
+    returned can only extend a prefix search that then finds nothing.
+    Tokenizing each key inside a sentence instead found no more of them in
+    either GloVe 2024 vocabulary.
+    """
+    vocab = Vocab(*encode_vocab(keys))
+    return np.array([r in tokenize(k, vocab, chars, case_sensitive, clitics, masked).rows for r, k in enumerate(keys)], dtype=bool)
 
 
 def build(recipe_path, language_dir, source_zip, out_path, version: int) -> dict:
@@ -238,6 +246,12 @@ def build(recipe_path, language_dir, source_zip, out_path, version: int) -> dict
     blocks.append(block[:k])
     q = np.concatenate(blocks)
     del blocks
+    reading.update(f"{format_count(len(q))} rows, dropping unreachable keys   {format_time(reading.elapsed())}")
+    keep = reachable(keys, chars, case_sensitive, clitics, masked)
+    counts["unreachable key"] = int((~keep).sum())
+    keys = [key for key, ok in zip(keys, keep) if ok]
+    norms = [norm for norm, ok in zip(norms, keep) if ok]
+    q = q[keep]
     if len(q) == 0:
         raise ValueError(f"{source_zip}: no usable rows")
 

@@ -29,8 +29,8 @@ def test_open(pack_path):
         assert pack.meta["case_sensitive"] is False
         assert pack.meta["clitics"] == fixture.CLITICS
         assert pack.meta["source"]["license"] == "CC0-1.0"
-        assert (pack.n, pack.dims) == (48, 16)
-        assert list(pack.keys) == fixture.KEYS
+        assert (pack.n, pack.dims) == (45, 16)
+        assert list(pack.keys) == fixture.PACK_KEYS
         assert pack.stopwords == fixture.STOPWORDS
         assert pack.masked == fixture.MASKED
         assert pack.chars.lower("ÀB") == "àb"
@@ -38,21 +38,21 @@ def test_open(pack_path):
 
 def test_lookup(pack_path):
     with WordPack(pack_path) as pack:
-        out = pack.lookup(["dog", "nope", "new york"])
-        assert out.dtype == np.int64 and out.tolist() == [15, -1, 21]
+        out = pack.lookup(["dog", "nope", "u.s.", "new york"])
+        assert out.dtype == np.int64 and out.tolist() == [15, -1, 26, -1]
 
 
 def test_read_rows_matches_stored_matrix(pack_path):
     t = load_file(pack_path)
     with WordPack(pack_path) as pack:
         for m in (0, 1, 3, 10):
-            assert np.array_equal(pack.read_rows(list(range(48)), m), dequantize(t["matrix"], t["abtt"], m))
+            assert np.array_equal(pack.read_rows(list(range(45)), m), dequantize(t["matrix"], t["abtt"], m))
 
 
 def test_read_rows_order_repeats_and_input_types(pack_path):
     with WordPack(pack_path) as pack:
-        full = pack.read_rows(range(48))  # ssdiff reads its prefix as a range
-        idx = [5, 0, 5, 47, 3, 3, 20]
+        full = pack.read_rows(range(45))  # ssdiff reads its prefix as a range
+        idx = [5, 0, 5, 44, 3, 3, 20]
         # different batch sizes may differ in the last float bits, hence allclose
         assert np.allclose(pack.read_rows(idx), full[idx], atol=1e-6)
         assert np.allclose(pack.read_rows(np.array(idx, dtype=np.int32)), full[idx], atol=1e-6)
@@ -62,7 +62,7 @@ def test_read_rows_order_repeats_and_input_types(pack_path):
 def test_read_rows_errors(pack_path):
     with WordPack(pack_path) as pack:
         with pytest.raises(IndexError):
-            pack.read_rows([48])
+            pack.read_rows([45])
         with pytest.raises(IndexError):
             pack.read_rows([-1])
         with pytest.raises(ValueError):
@@ -71,9 +71,9 @@ def test_read_rows_errors(pack_path):
 
 def test_threads(pack_path):
     with WordPack(pack_path) as pack:
-        full = pack.read_rows(range(48))
+        full = pack.read_rows(range(45))
         rng = np.random.default_rng(0)
-        jobs = [rng.integers(0, 48, size=10).tolist() for _ in range(400)]
+        jobs = [rng.integers(0, 45, size=10).tolist() for _ in range(400)]
         with ThreadPoolExecutor(8) as ex:
             results = list(ex.map(pack.read_rows, jobs))
         for idx, got in zip(jobs, results):
@@ -83,14 +83,14 @@ def test_threads(pack_path):
 def test_tokenize_uses_pack_settings(pack_path):
     with WordPack(pack_path) as pack:
         t = pack.tokenize("I don't like sh*t.")
-        assert t.keys == ["i", "do", "n't", "like", "shit"] and t.rows == [1, 2, 3, 39, 34]
+        assert t.keys == ["i", "do", "n't", "like", "shit"] and t.rows == [1, 2, 3, 36, 31]
 
 
 def test_case_sensitive_pack(cased_pack_path):
     with WordPack(cased_pack_path) as pack:
         assert pack.meta["case_sensitive"] is True
         t = pack.tokenize("POLSKA polish Polish. I")
-        assert t.keys == ["Polska", "polish", "Polish", "i"] and t.rows == [48, 50, 49, 1]
+        assert t.keys == ["Polska", "polish", "Polish", "i"] and t.rows == [45, 47, 46, 1]
 
 
 def test_selftest_passes(pack_path, cased_pack_path):
@@ -241,10 +241,10 @@ def test_corrupt_metadata_names_path(pack_path, tmp_path, corrupt):
 def test_vocab_count_mismatch_names_path(pack_path, tmp_path):
     header, data = _parts(pack_path)
     start, end = header["vocab_order"]["data_offsets"]
-    header["vocab_order"]["shape"] = [47]
+    header["vocab_order"]["shape"] = [44]
     # Keep the tensor inside the file; the last 4 bytes become unused.
     header["vocab_order"]["data_offsets"] = [start, end - 4]
     bad = _write(tmp_path / "bad.wordpack", header, data)
-    with pytest.raises(WordPackError, match="vocab has 48 keys") as e:
+    with pytest.raises(WordPackError, match="vocab has 45 keys") as e:
         WordPack(bad)
     assert str(bad) in str(e.value)

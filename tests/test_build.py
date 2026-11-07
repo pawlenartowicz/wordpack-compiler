@@ -9,13 +9,13 @@ from safetensors.numpy import load_file
 
 import fixture
 from wordpack_compiler.build import LINE_BREAK_TEXTS, build, compute_abtt, encode_vocab, kept_rows
-from wordpack_compiler.reader import dequantize
+from wordpack_compiler.reader import WordPack, dequantize, tokenize
 
 TENSORS = {
     "abtt": ("float32", (11, 16)),
-    "norms": ("float32", (48,)),
-    "vocab_order": ("int32", (48,)),
-    "matrix": ("int8", (48, 16)),
+    "norms": ("float32", (45,)),
+    "vocab_order": ("int32", (45,)),
+    "matrix": ("int8", (45, 16)),
 }
 BYTE_TENSORS = ["vocab", "stopwords", "masked", "chars", "selftest"]
 
@@ -67,35 +67,35 @@ def test_rows_dropped_and_kept(tmp_path):
         "malformed line": 1,
         "duplicate key": 1,
         "zero or non-finite row": 1,
-        "<unk> row": 1,
+        "unreachable key": 4,  # <unk> and fixture.UNREACHABLE
     }
-    assert summary["N"] == 48 and summary["D"] == 16
+    assert summary["N"] == 45 and summary["D"] == 16
     t = load_file(tmp_path / "p.wordpack")
     keys = bytes(t["vocab"]).decode("utf-8").split("\n")[:-1]
-    assert keys == fixture.KEYS  # the NFC form of café that came first won
+    assert keys == fixture.PACK_KEYS  # the NFC form of café that came first won
 
 
 def test_quantized_matrix(pack_path):
     t = load_file(pack_path)
     q = t["matrix"]
     assert q.min() > -128 and (np.abs(q.astype(int)).max(axis=1) == 127).all()
-    src = fixture.source_rows(fixture.KEYS)
+    src = fixture.source_rows(fixture.KEYS)[[fixture.KEYS.index(k) for k in fixture.PACK_KEYS]]
+    assert np.allclose(t["norms"], np.linalg.norm(src, axis=1), rtol=1e-5)
     src /= np.linalg.norm(src, axis=1, keepdims=True)
     assert (np.sum(dequantize(q, None, 0) * src, axis=1) > 0.999).all()
-    assert np.allclose(t["norms"], np.linalg.norm(fixture.source_rows(fixture.KEYS), axis=1), rtol=1e-5)
 
 
 def test_abtt_and_order_tensors(pack_path):
     t = load_file(pack_path)
     assert np.array_equal(t["abtt"], compute_abtt(t["matrix"]))
-    assert np.array_equal(t["vocab_order"], encode_vocab(fixture.KEYS)[1])
+    assert np.array_equal(t["vocab_order"], encode_vocab(fixture.PACK_KEYS)[1])
 
 
 def test_selftest_tensor(pack_path):
     data = json.loads(bytes(load_file(pack_path)["selftest"]))
     assert [e["text"] for e in data["texts"]] == fixture.SELFTEST + LINE_BREAK_TEXTS
     assert [(v["row"], v["abtt"]) for v in data["vectors"]] == [
-        (0, 0), (0, 1), (0, 3), (47, 0), (47, 1), (47, 3)
+        (0, 0), (0, 1), (0, 3), (44, 0), (44, 1), (44, 3)
     ]
     assert data["texts"][0]["keys"] == ["i", "do", "n't", "like", "the", "dog", "it", "'s", "well-known"]
 
@@ -161,7 +161,7 @@ def test_nan_and_overflowing_rows_are_dropped(tmp_path):
         zf.writestr("vectors.txt", text + extra)
     summary = build(recipe, lang, zip_path, tmp_path / "p.wordpack", 1)
     assert summary["counts"]["zero or non-finite row"] == 3  # the zero row, nan and huge
-    assert summary["N"] == 48
+    assert summary["N"] == 45
     keys = bytes(load_file(tmp_path / "p.wordpack")["vocab"]).decode().split("\n")
     assert "nanrow" not in keys and "huge" not in keys
 
@@ -180,17 +180,23 @@ def test_stopword_is_folded_with_the_pack_table(tmp_path):
     assert bytes(load_file(tmp_path / "p.wordpack")["stopwords"]).decode() == "n't\nthe\n"
 
 
-def test_kept_rows_are_the_rows_a_pack_keeps(tmp_path):
+def test_dropping_unreachable_keys_leaves_tokens_unchanged(pack_path):
+    full = fixture.vocab_from_keys(fixture.KEYS)
+    with WordPack(pack_path) as pack:
+        for text in fixture.SELFTEST:
+            assert pack.tokenize(text).keys == tokenize(text, full, pack.chars, False, fixture.CLITICS, fixture.MASKED).keys
+
+
+def test_kept_rows_are_the_usable_source_rows(tmp_path):
     _, _, zip_path = fixture.write_source(tmp_path)
     counts = Counter()
     keys = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, counts, False)]
-    assert keys == fixture.KEYS
+    assert keys == fixture.KEYS + ["<unk>"]  # build() drops the unreachable ones
     assert counts == Counter({
         "lines": 52,
         "malformed line": 1,
         "duplicate key": 1,
         "zero or non-finite row": 1,
-        "<unk> row": 1,
     })
 
 
@@ -211,7 +217,7 @@ def test_keys_are_folded_and_the_first_of_each_is_kept(tmp_path):
         assert (rows["'s"] == 0.75).all() == (name == "before")
         summary = build(recipe, lang, zip_path, tmp_path / f"{name}.wordpack", 1)
         keys = bytes(load_file(tmp_path / f"{name}.wordpack")["vocab"]).decode().split("\n")[:-1]
-        assert keys.count("'s") == 1 and "" not in keys and summary["N"] == 48
+        assert keys.count("'s") == 1 and "" not in keys and summary["N"] == 45
 
 
 def test_keys_are_lowercased_in_a_case_insensitive_pack(tmp_path):
@@ -223,6 +229,6 @@ def test_keys_are_lowercased_in_a_case_insensitive_pack(tmp_path):
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("vectors.txt", "\n".join(lines + extra) + "\n")
     insensitive = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, Counter(), False)]
-    assert insensitive == fixture.KEYS + ["ꭲhe"]
+    assert insensitive == fixture.KEYS + ["<unk>", "ꭲhe"]
     sensitive = [key for key, _, _ in kept_rows(zip_path, fixture.DIMS, Counter(), True)]
-    assert sensitive == fixture.KEYS + ["The", "Ꭲhe"]
+    assert sensitive == fixture.KEYS + ["<unk>", "The", "Ꭲhe"]

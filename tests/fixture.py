@@ -28,6 +28,11 @@ KEYS = [
 ]
 
 
+# Keys no text tokenizes to: the tokenizer tests need them in KEYS, a built pack drops them.
+UNREACHABLE = ["new york", "it.", "don't"]
+PACK_KEYS = [k for k in KEYS if k not in UNREACHABLE]
+
+
 def vocab_from_keys(keys: list[str]) -> Vocab:
     return Vocab(*encode_vocab(keys))
 
