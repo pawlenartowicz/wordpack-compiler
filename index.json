@@ -11,6 +11,12 @@
           "size": 379271287,
           "sha256": "44b93e64523751da3c6a43f9f80e1e05d96faccbd924dccd9438a9c34917441c",
           "format_version": 1
+        },
+        "2": {
+          "file": "en-glove2024-dolma-2.wordpack",
+          "size": 351122427,
+          "sha256": "536f36eef66ca49975170180044408e89bacb5f0ff0853ae02c1281eaa92beb5",
+          "format_version": 1
         }
       }
     },
@@ -23,6 +29,12 @@
           "file": "en-glove2024-wikigiga-1.wordpack",
           "size": 408754799,
           "sha256": "e0a7b7c2ee51cc74864c8c3c20c47e353f2ba7ab7438e396c5ce1845ceebca67",
+          "format_version": 1
+        },
+        "2": {
+          "file": "en-glove2024-wikigiga-2.wordpack",
+          "size": 365816954,
+          "sha256": "4ecd6e2e3f0d6a1ab8f93786d61fd1dab78069d5414e6768f9b9001b085e2512",
           "format_version": 1
         }
       }
